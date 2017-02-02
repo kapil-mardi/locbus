@@ -14,5 +14,7 @@ public class Application extends MultiDexApplication{
     protected void attachBaseContext(Context base) {
         super.attachBaseContext(base);
         MultiDex.install(this);
+        AppRoot root = AppRoot.getInstance();
+        root.setUpContext(base);
     }
 }

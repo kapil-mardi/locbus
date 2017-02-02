@@ -20,9 +20,16 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import kapsapps.xyz.locbus.R;
 import kapsapps.xyz.locbus.locationUtils.LocationProvider;
+import kapsapps.xyz.locbus.models.BusModel;
 import kapsapps.xyz.locbus.presenter.MapPresenter;
+import kapsapps.xyz.locbus.services.LocationUpdateService;
 
 public class MapsActivity extends FragmentActivity implements OnMapReadyCallback,
         GoogleApiClient.ConnectionCallbacks,
@@ -34,12 +41,14 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private GoogleApiClient mGoogleApiClient;
     private LocationProvider mLocationProvider;
     private Marker mCurrentLocation;
+    private Map<Integer,Marker> mMarkers;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_maps);
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
+        mMarkers = new HashMap<>();
         mapFragment.getMapAsync(this);
         buildGoogleClient();
         mLocationProvider = new LocationProvider(this,mGoogleApiClient);
@@ -59,16 +68,27 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
     @Override
     protected void onStart() {
-        mGoogleApiClient.connect();
         super.onStart();
+        mGoogleApiClient.connect();
+
+        Intent intent = new Intent(MapsActivity.this, LocationUpdateService.class);
+        startService(intent);
     }
 
-    /*@Override
+    @Override
     protected void onPause() {
+        super.onPause();
         mGoogleApiClient.disconnect();
         mLocationProvider.stopLocationUpdates();
-        super.onPause();
-    }*/
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        Intent intent = new Intent(MapsActivity.this, LocationUpdateService.class);
+        stopService(intent);
+        mLocationProvider.stop();
+    }
 
     @Override
     public void onMapReady(GoogleMap googleMap) {
@@ -114,8 +134,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
             mCurrentLocation = mMap.addMarker(new MarkerOptions().position(newLocation));
             mMap.moveCamera(CameraUpdateFactory.newLatLng(newLocation));
-
-            Toast.makeText(getApplicationContext(),newLocation.toString(),Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -126,5 +144,33 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }catch (Exception e){
             e.printStackTrace();
         }
+    }
+
+    @Override
+    public void showBuses(List<BusModel> models) {
+
+        for(Integer key : mMarkers.keySet()){
+            mMarkers.get(key).remove();
+        }
+
+        mMarkers.clear();
+
+        for(BusModel bus : models){
+            if(mMap != null) {
+                createOrUpdateMarker(bus);
+            }
+        }
+
+    }
+
+    private void createOrUpdateMarker(BusModel bus) {
+
+        int busId = bus.getBusId();
+
+        Marker marker = mMap.addMarker(new MarkerOptions());
+        LatLng newLocation = new LatLng(bus.getLatitude(),bus.getLongitude());
+        marker.setPosition(newLocation);
+        mMarkers.put(busId,marker);
+
     }
 }
