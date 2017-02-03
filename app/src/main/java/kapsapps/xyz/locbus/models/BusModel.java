@@ -6,58 +6,31 @@ package kapsapps.xyz.locbus.models;
 
 public class BusModel {
 
-    private String busName;
-    private String driverName;
-    private int busId;
-    private int driverId;
-    private double latitude;
-    private double longitude;
+    private long CreatedDatetime;
+    private double Lat;
+    private double Long;
 
-    public String getBusName() {
-        return busName;
+    public long getCreatedDatetime() {
+        return CreatedDatetime;
     }
 
-    public void setBusName(String busName) {
-        this.busName = busName;
+    public void setCreatedDatetime(long createdDatetime) {
+        CreatedDatetime = createdDatetime;
     }
 
-    public String getDriverName() {
-        return driverName;
+    public double getLat() {
+        return Lat;
     }
 
-    public void setDriverName(String driverName) {
-        this.driverName = driverName;
+    public void setLat(double lat) {
+        Lat = lat;
     }
 
-    public int getBusId() {
-        return busId;
+    public double getLong() {
+        return Long;
     }
 
-    public void setBusId(int busId) {
-        this.busId = busId;
-    }
-
-    public int getDriverId() {
-        return driverId;
-    }
-
-    public void setDriverId(int driverId) {
-        this.driverId = driverId;
-    }
-
-    public double getLatitude() {
-        return latitude;
-    }
-
-    public void setLatitude(double latitude) {
-        this.latitude = latitude;
-    }
-
-    public double getLongitude() {
-        return longitude;
-    }
-
-    public void setLongitude(double longitude) {
-        this.longitude = longitude;
+    public void setLong(double aLong) {
+        Long = aLong;
     }
 }

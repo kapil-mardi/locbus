@@ -7,11 +7,13 @@ import android.location.Location;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.util.Log;
+import android.widget.Toast;
 
 import com.android.volley.AuthFailureError;
 import com.android.volley.Request;
 import com.android.volley.Response;
 import com.android.volley.VolleyError;
+import com.android.volley.toolbox.JsonArrayRequest;
 import com.android.volley.toolbox.StringRequest;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.PendingResult;
@@ -34,16 +36,19 @@ import org.json.JSONArray;
 
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import kapsapps.xyz.locbus.BuildConfig;
 import kapsapps.xyz.locbus.models.BusModel;
+import kapsapps.xyz.locbus.models.DriverListModel;
 import kapsapps.xyz.locbus.presenter.MapPresenter;
 import kapsapps.xyz.locbus.services.LocationUpdateService;
 import kapsapps.xyz.locbus.ui.MapsActivity;
 import kapsapps.xyz.locbus.utils.AppRoot;
 import kapsapps.xyz.locbus.utils.Constants;
+import kapsapps.xyz.locbus.utils.PrefUtils;
 
 /**
  * Created by android1 on 1/2/17.
@@ -81,8 +86,8 @@ public class LocationProvider implements LocationListener {
         Gson gson = (new GsonBuilder().excludeFieldsWithModifiers(Modifier.FINAL, Modifier.TRANSIENT, Modifier.STATIC)).create();
 
         Type type = new TypeToken<BusModel>(){}.getType();
-        List<BusModel> buses = gson.fromJson(array.toString(),type);
-        presenter.showBuses(buses);
+        BusModel[] buses = gson.fromJson(array.toString(),BusModel[].class);
+        presenter.showBuses(buses[0]);
 
     }
 
@@ -117,8 +122,10 @@ public class LocationProvider implements LocationListener {
     }
 
     public void startLocationUpdates() {
-        Log.d(TAG,"starting location Update");
-        LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, mLocationRequest, this);
+        if(mGoogleApiClient.isConnected()) {
+            Log.d(TAG, "starting location Update");
+            LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, mLocationRequest, this);
+        }
     }
 
 
@@ -132,17 +139,22 @@ public class LocationProvider implements LocationListener {
     @Override
     public void onLocationChanged(Location location) {
         presenter.onLocationChanged(location);
-        sendMyLocationToServer(location);
+        if(PrefUtils.getUserRoleName().equals("Driver")) {
+            sendMyLocationToServer(location);
+        }
     }
 
     private void sendMyLocationToServer(Location location) {
 
         double lat = location.getLatitude();
         double lng = location.getLongitude();
+        long time = location.getTime();
+        int routId = PrefUtils.getRoutedId();
 
-        String url = BuildConfig.host + Constants.UPLOAD_LOCATION;
+        String url = BuildConfig.host + Constants.UPLOAD_LOCATION + "?RouteUserAssociationID="+routId+"&latitude="+lat+"&longitude="+lng+"&CreatedDatetime="+time;
 
-        StringRequest request = new StringRequest(Request.Method.POST, url, new Response.Listener<String>() {
+
+        StringRequest request = new StringRequest(Request.Method.GET, url, new Response.Listener<String>() {
             @Override
             public void onResponse(String response) {
                 mAppRoot.removeRequestFromQueue(TAG);
@@ -150,17 +162,44 @@ public class LocationProvider implements LocationListener {
         }, new Response.ErrorListener() {
             @Override
             public void onErrorResponse(VolleyError error) {
-
+                Log.d(TAG,error.toString());
             }
-        }){
-            @Override
-            protected Map<String, String> getParams() throws AuthFailureError {
-
-                return super.getParams();
-            }
-        };
+        });
 
         mAppRoot.addRequest(request,TAG);
 
+    }
+
+    public void getDriverList() {
+        final String localCall = "getDrivers";
+
+        String url = BuildConfig.host + Constants.GET_DRIVERS;
+        JsonArrayRequest request = new JsonArrayRequest(Request.Method.GET, url, null, new Response.Listener<JSONArray>() {
+            @Override
+            public void onResponse(JSONArray response) {
+                mAppRoot.removeRequestFromQueue(localCall);
+                populateDriverList(response);
+            }
+        }, new Response.ErrorListener() {
+            @Override
+            public void onErrorResponse(VolleyError error) {
+                mAppRoot.removeRequestFromQueue(localCall);
+            }
+        });
+
+        mAppRoot.addRequest(request,localCall);
+    }
+
+    private void populateDriverList(JSONArray response) {
+
+        try{
+            Gson gson = (new GsonBuilder().excludeFieldsWithModifiers(Modifier.FINAL, Modifier.TRANSIENT, Modifier.STATIC)).create();
+
+            Type listType = new TypeToken<List<DriverListModel>>() {}.getType();
+            List<DriverListModel> driverList = gson.fromJson(response.toString(),listType);
+            presenter.showDriverList(driverList);
+        }catch (Exception e){
+            e.printStackTrace();
+        }
     }
 }

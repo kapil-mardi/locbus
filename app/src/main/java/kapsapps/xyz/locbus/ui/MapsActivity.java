@@ -1,11 +1,19 @@
 package kapsapps.xyz.locbus.ui;
 
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.location.Location;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.FragmentActivity;
 import android.os.Bundle;
+import android.support.v7.app.AlertDialog;
+import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.Toolbar;
+import android.util.Log;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.widget.Toast;
 
 import com.google.android.gms.common.ConnectionResult;
@@ -16,11 +24,14 @@ import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptor;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,10 +39,12 @@ import java.util.Map;
 import kapsapps.xyz.locbus.R;
 import kapsapps.xyz.locbus.locationUtils.LocationProvider;
 import kapsapps.xyz.locbus.models.BusModel;
+import kapsapps.xyz.locbus.models.DriverListModel;
 import kapsapps.xyz.locbus.presenter.MapPresenter;
 import kapsapps.xyz.locbus.services.LocationUpdateService;
+import kapsapps.xyz.locbus.utils.PrefUtils;
 
-public class MapsActivity extends FragmentActivity implements OnMapReadyCallback,
+public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback,
         GoogleApiClient.ConnectionCallbacks,
         GoogleApiClient.OnConnectionFailedListener,MapPresenter {
 
@@ -40,18 +53,28 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private GoogleMap mMap;
     private GoogleApiClient mGoogleApiClient;
     private LocationProvider mLocationProvider;
-    private Marker mCurrentLocation;
-    private Map<Integer,Marker> mMarkers;
+    private Marker mCurrentLocation,mCurrentRoutPosition;
+    private AlertDialog.Builder driverListDialog;
+    private Toolbar mToolbar;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_maps);
+        mToolbar = (Toolbar) findViewById(R.id.toolbar);
+
+        setSupportActionBar(mToolbar);
+        getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+
+        getSupportActionBar().setTitle("");
+
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
-        mMarkers = new HashMap<>();
         mapFragment.getMapAsync(this);
         buildGoogleClient();
         mLocationProvider = new LocationProvider(this,mGoogleApiClient);
+        driverListDialog = new AlertDialog.Builder(this);
+        driverListDialog.setCancelable(false);
+        driverListDialog.setTitle(R.string.chooseDriver);
 
     }
 
@@ -71,8 +94,10 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         super.onStart();
         mGoogleApiClient.connect();
 
-        Intent intent = new Intent(MapsActivity.this, LocationUpdateService.class);
-        startService(intent);
+        if(!PrefUtils.getUserRoleName().equals("Driver")) {
+            Intent intent = new Intent(MapsActivity.this, LocationUpdateService.class);
+            startService(intent);
+        }
     }
 
     @Override
@@ -133,7 +158,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 mCurrentLocation.remove();
 
             mCurrentLocation = mMap.addMarker(new MarkerOptions().position(newLocation));
-            mMap.moveCamera(CameraUpdateFactory.newLatLng(newLocation));
+            //mMap.moveCamera(CameraUpdateFactory.newLatLng(newLocation));
         }
     }
 
@@ -147,30 +172,92 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     }
 
     @Override
-    public void showBuses(List<BusModel> models) {
+    public void showBuses(BusModel model) {
+        createOrUpdateMarker(model);
+    }
 
-        for(Integer key : mMarkers.keySet()){
-            mMarkers.get(key).remove();
+    @Override
+    public void showDriverList(final List<DriverListModel> driverList) {
+
+        String[] routes = new String[driverList.size()];
+        boolean[] preSelection = new boolean[driverList.size()];
+
+        for(int itr = 0; itr < driverList.size(); itr++){
+            routes[itr] = driverList.get(itr).getRoute();
+            preSelection[itr] = false;
         }
 
-        mMarkers.clear();
+        final int[] selectedRoutIds = new int[1];
 
-        for(BusModel bus : models){
-            if(mMap != null) {
-                createOrUpdateMarker(bus);
+        driverListDialog.setMultiChoiceItems(routes, preSelection, new DialogInterface.OnMultiChoiceClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which, boolean isChecked) {
+                if(isChecked) {
+                    DriverListModel model = driverList.get(which);
+                    selectedRoutIds[0] = model.getRouteID();
+                }
             }
-        }
+        });
 
+        driverListDialog.setPositiveButton(R.string.okay, new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                PrefUtils.setSelectedRoute(selectedRoutIds[0]);
+                dialog.dismiss();
+            }
+        });
+
+        driverListDialog.setNegativeButton(R.string.cancel,null);
+        driverListDialog.show();
     }
 
     private void createOrUpdateMarker(BusModel bus) {
 
-        int busId = bus.getBusId();
+        if(mCurrentRoutPosition != null)
+            mCurrentRoutPosition.remove();
 
-        Marker marker = mMap.addMarker(new MarkerOptions());
-        LatLng newLocation = new LatLng(bus.getLatitude(),bus.getLongitude());
-        marker.setPosition(newLocation);
-        mMarkers.put(busId,marker);
+        LatLng newLocation = new LatLng(bus.getLat(),bus.getLong());
 
+        mCurrentRoutPosition = mMap.addMarker(new MarkerOptions().position(newLocation)
+                .icon(BitmapDescriptorFactory.fromResource(R.mipmap.ic_launcher)));
+
+        mCurrentRoutPosition.setTitle("Bus");
+
+        Log.d(TAG,"Adding bus marker");
+
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        MenuInflater inflater = getMenuInflater();
+        inflater.inflate(R.menu.maps,menu);
+
+        if(PrefUtils.getUserRoleName().equals("Driver")){
+            MenuItem item = menu.findItem(R.id.action_drivers);
+            item.setVisible(false);
+        }
+
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        switch (item.getItemId()){
+            case R.id.action_logout : {
+                doLogout();
+                break;
+            }
+
+            case R.id.action_drivers : {
+                mLocationProvider.getDriverList();
+                break;
+            }
+        }
+        return true;
+    }
+
+    private void doLogout() {
+        PrefUtils.deletePrefs();
+        finish();
     }
 }

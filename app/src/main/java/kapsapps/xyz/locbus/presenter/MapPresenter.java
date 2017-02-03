@@ -7,6 +7,7 @@ import com.google.android.gms.location.LocationSettingsResult;
 import java.util.List;
 
 import kapsapps.xyz.locbus.models.BusModel;
+import kapsapps.xyz.locbus.models.DriverListModel;
 
 /**
  * Created by android1 on 1/2/17.
@@ -18,5 +19,7 @@ public interface MapPresenter {
 
     void requestLocationSettings(LocationSettingsResult result);
 
-    void showBuses(List<BusModel> models);
+    void showBuses(BusModel model);
+
+    void showDriverList(List<DriverListModel> driverList);
 }

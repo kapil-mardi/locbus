@@ -24,6 +24,7 @@ import java.util.TimerTask;
 import kapsapps.xyz.locbus.BuildConfig;
 import kapsapps.xyz.locbus.utils.AppRoot;
 import kapsapps.xyz.locbus.utils.Constants;
+import kapsapps.xyz.locbus.utils.PrefUtils;
 
 public class LocationUpdateService extends IntentService {
 
@@ -80,12 +81,14 @@ public class LocationUpdateService extends IntentService {
         }
 
         private void getLocationFromServer() {
-            String url = BuildConfig.host + Constants.LOCATION_FETCH;
+            String url = BuildConfig.host + Constants.LOCATION_FETCH + "?routeID="+ PrefUtils.getSelectedRoute();
             JsonArrayRequest updateRequest = new JsonArrayRequest(Request.Method.GET, url, null, new Response.Listener<JSONArray>() {
                 @Override
                 public void onResponse(JSONArray response) {
                     mAppRoot.removeRequestFromQueue(TAG);
-                    publishResult(response);
+                    if(response.length() > 0) {
+                        publishResult(response);
+                    }
                 }
             }, new Response.ErrorListener() {
                 @Override
@@ -119,5 +122,9 @@ public class LocationUpdateService extends IntentService {
         }
     }
 
-
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        PrefUtils.setSelectedRoute(0);
+    }
 }
